@@ -17,6 +17,10 @@ TestResults/
 .nuget/
 **/packages/*
 
+.gemini
+Gemini.md
+GEMINI.MD
+
 # Rider/JetBrains IDE files
 .idea/
 
@@ -51,3 +55,5 @@ secrets.json
 
 # Environment variable configuration (e.g., .env file)
 .env
+gemini
+gemini.md
