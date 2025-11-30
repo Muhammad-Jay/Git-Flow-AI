@@ -1,0 +1,53 @@
+# -------------------------------------
+# 1. Standard .NET Build and Binaries
+# -------------------------------------
+
+# Built projects/binaries
+[Bb]in/
+[Oo]bj/
+
+# Test results
+TestResults/
+.vs/
+.suo
+*.user
+*.userprefs
+
+# NuGet packages
+.nuget/
+**/packages/*
+
+# Rider/JetBrains IDE files
+.idea/
+
+# -------------------------------------
+# 2. .NET Tool Specific Exclusions
+# -------------------------------------
+
+# Local NuGet tool cache (for global tool installation testing)
+.tool-cache/
+
+# -------------------------------------
+# 3. Environment/OS Specific Files (Zorin OS / Linux)
+# -------------------------------------
+
+# Thumbnails and system files
+.DS_Store
+.Trashes
+Thumbs.db
+*.bak
+*~
+.#*
+
+# -------------------------------------
+# 4. GitFlowAI Sensitive/Transient Data
+# -------------------------------------
+
+# Exclude your API key configuration file (CRITICAL!)
+# Assuming you will use a local JSON/text file for the key if not using env vars.
+# If you use a file named 'secrets.json' for the Gemini API key, add it here:
+secrets.json 
+*.config.user 
+
+# Environment variable configuration (e.g., .env file)
+.env
