@@ -61,10 +61,9 @@ namespace GitFlowAi.Services
                 {
                     Console.WriteLine("Changes were made on working directory");
                 
-                    Patch unifiedPatch = _repository.Diff.Compare<Patch>();
+                    // Patch unifiedPatch = _repository.Diff.Compare<Patch>();
                 
-                    Console.WriteLine(unifiedPatch.Content);
-                
+                    // Console.WriteLine(unifiedPatch.Content);
                 }
                 else
                 {

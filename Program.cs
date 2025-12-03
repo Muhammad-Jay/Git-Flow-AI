@@ -1,6 +1,7 @@
 ﻿using LibGit2Sharp;
 using System.CommandLine;
 using GitFlowAi.Services;
+using GitFlowAi.Config;
 
 Console.WriteLine("--- Welcome to GitFlowAI ---");
 
@@ -17,12 +18,17 @@ rootCommand.Add(autoCommand);
 rootCommand.Add(statusCommand);
 return await rootCommand.InvokeAsync(args);
 
-void RunStatusCheck()
+async void RunStatusCheck()
 {
     try
     {
         string workDirectory = Environment.CurrentDirectory;
         var service = new GitService(workDirectory);
+        Agent newAgent = new Agent("what is this", "you are an expert");
+        
+        newAgent.SetModel("gemini-flash-002");
+        string model = newAgent.GetModel();
+        Console.WriteLine($"model: {model}");
         
         service.PrintCurrentBranch();
         service.GetRepoStatus();
@@ -32,7 +38,13 @@ void RunStatusCheck()
         if (isDirty)
         {
             Console.WriteLine($"Changes were made on working directory: {workDirectory}");
-            Console.WriteLine(diff);
+            var manager = new SecretManager();
+            string apiKey = manager.GetGeminiApiKey();
+            
+            var genClient = new GeminiService(apiKey);
+
+            string response = await genClient.GenerateDecision(diff);
+
         }
         else
         {
@@ -62,8 +74,10 @@ void RunAutoFlow()
 
         if (isDirty)
         {
+            string formatedDiff = diff.Length > 0 ? diff?.Substring(0, 400) : "";
             Console.WriteLine($"Changes were made on working directory: {workDirectory}");
-            Console.WriteLine(diff);
+            Console.WriteLine(formatedDiff);
+            Console.WriteLine("--------------------------------------------------");
         }
     }
     catch (RepositoryNotFoundException ex)
