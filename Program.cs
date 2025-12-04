@@ -2,86 +2,162 @@
 using System.CommandLine;
 using GitFlowAi.Services;
 using GitFlowAi.Config;
+using GitFlowAi.Models;
 
-Console.WriteLine("--- Welcome to GitFlowAI ---");
-
-var rootCommand = new RootCommand("An AI-powered tool to automate Git workflows.");
-
-var autoCommand = new Command("auto", "Automatically analyze changes, commit, or branch based on AI decisions.");
-
-var statusCommand = new Command("status", "Check the status of the current working directory.");
-
-statusCommand.SetHandler(() => RunStatusCheck());
-autoCommand.SetHandler(() => RunAutoFlow());
-
-rootCommand.Add(autoCommand);
-rootCommand.Add(statusCommand);
-return await rootCommand.InvokeAsync(args);
-
-async void RunStatusCheck()
+namespace GitFlowAi
 {
-    try
+    class Program
     {
-        string workDirectory = Environment.CurrentDirectory;
-        var service = new GitService(workDirectory);
-        Agent newAgent = new Agent("what is this", "you are an expert");
-        
-        newAgent.SetModel("gemini-flash-002");
-        string model = newAgent.GetModel();
-        Console.WriteLine($"model: {model}");
-        
-        service.PrintCurrentBranch();
-        service.GetRepoStatus();
-        
-        (bool isDirty, string? diff) = service.GetRepoStatusAndDiff();
-
-        if (isDirty)
+        static async Task<int> Main(string[] args)
         {
-            Console.WriteLine($"Changes were made on working directory: {workDirectory}");
-            var manager = new SecretManager();
-            string apiKey = manager.GetGeminiApiKey();
+            Console.WriteLine("--- Welcome to GitFlowAI ---");
+
+            var rootCommand = new RootCommand("An AI-powered tool to automate Git workflows.");
+            var autoCommand = new Command("auto", "Automatically analyze changes, commit, or branch based on AI decisions.");
+            var statusCommand = new Command("status", "Check the status of the current working directory.");
+            var runCommand = new Command("run", "Ai check the current directory and commit changes or create branched and commit base on the changes.");
             
-            var genClient = new GeminiService(apiKey);
+            // Handlers now correctly point to async methods returning Task
+            statusCommand.SetHandler( () => RunStatusCheck());
+            autoCommand.SetHandler( () => RunAutoFlow());
+            runCommand.SetHandler(() => InitialRun());
 
-            string response = await genClient.GenerateDecision(diff);
-
+            rootCommand.Add(autoCommand);
+            rootCommand.Add(statusCommand);
+            rootCommand.Add(runCommand); // Uncommented the run command
+            
+            // The root command correctly awaits the execution flow
+            return await rootCommand.InvokeAsync(args);
         }
-        else
-        {
-            Console.WriteLine("Directory is Clean");
-            Console.WriteLine("No changes were made");
-        }
-    }
-    catch (Exception e)
-    {
-        Console.WriteLine(e);
-        throw;
-    }
-}
-
-void RunAutoFlow()
-{
-    try
-    {
-        string workDirectory = Environment.CurrentDirectory;
-
-        var service = new GitService(workDirectory);
         
-        service.PrintCurrentBranch();
-        service.GetRepoStatus();
-        
-        (bool isDirty, string? diff) = service.GetRepoStatusAndDiff();
-
-        if (isDirty)
+        /// <summary>
+        /// Checks the status of the current working directory.
+        /// Changed from async void to async Task.
+        /// </summary>
+        async static Task RunStatusCheck()
         {
-            string formatedDiff = diff.Length > 0 ? diff?.Substring(0, 400) : "";
-            Console.WriteLine($"Changes were made on working directory: {workDirectory}");
-            Console.WriteLine(formatedDiff);
-            Console.WriteLine("--------------------------------------------------");
+            try
+            {
+                string workDirectory = Environment.CurrentDirectory;
+                // NOTE: GitService must be correctly initialized, assuming its definition is in GitFlowAi.Services
+                var service = new GitService(workDirectory);
+                
+                service.PrintCurrentBranch();
+                
+                // Task.Run is used here to potentially offload CPU-bound work, though it's often optional
+                // for I/O bound methods which should be async internally.
+                (bool isDirty, string? diff) = await Task.Run(() => service.GetRepoStatusAndDiff());
+
+                if (isDirty)
+                {
+                    Console.WriteLine($"Changes were made on working directory: {workDirectory}");
+                }
+                else
+                {
+                    Console.WriteLine("Directory is Clean");
+                    Console.WriteLine("No changes were made");
+                }
+            }
+            catch (Exception e)
+            {
+                // Catching the exception here prevents the application from crashing silently
+                Console.WriteLine($"❌ An error occurred during status check: {e.Message}");
+            }
         }
-    }
-    catch (RepositoryNotFoundException ex)
-    {
-        Console.WriteLine($"❌ Git Error: {ex.Message}");
+
+        /// <summary>
+        /// Runs the AI-powered automatic Git flow (analyze and decide).
+        /// Changed from async void to async Task.
+        /// </summary>
+        async static Task RunAutoFlow()
+        {
+            try
+            {
+                string workDirectory = Environment.CurrentDirectory;
+
+                var service = new GitService(workDirectory);
+                var manager = new SecretManager();
+                string apiKey = manager.GetGeminiApiKey();
+            
+                Console.WriteLine($"API Key Status: {(string.IsNullOrEmpty(apiKey) ? "MISSING" : "FOUND")}");
+            
+                // NOTE: GeminiService must be correctly initialized, assuming its definition is in GitFlowAi.Services
+                var genClient = new GeminiService(apiKey);
+            
+                service.PrintCurrentBranch();
+                // Assuming GetRepoStatus() just prints information and doesn't return anything
+                service.GetRepoStatus();
+            
+                // Task.Run is used to ensure the LibGit2Sharp call is offloaded from the UI thread,
+                // which is good practice for CPU-bound operations in command line tools.
+                (bool isDirty, string? diff) = await Task.Run(() => service.GetRepoStatusAndDiff());
+            
+                if (isDirty)
+                {
+                    Console.WriteLine($"Changes were made on working directory: {workDirectory}");
+                    Console.WriteLine("--------------------------------------------------");
+
+                    // The actual AI call, which should be asynchronous internally in GeminiService
+                    string response = await genClient.GenerateDecision(diff);
+
+                    Console.WriteLine($"AI Response: {response}");
+                    string formatedDiff = diff.Length > 0 ? diff.Substring(0, Math.Min(diff.Length, 100)) + (diff.Length > 100 ? "..." : "") : "No Diff";
+                    Console.WriteLine($"Preview of Changes Sent to AI: {formatedDiff}");
+                }
+                else
+                {
+                    Console.WriteLine("Directory is Clean. No changes to process.");
+                }
+            }
+            catch (RepositoryNotFoundException ex)
+            {
+                Console.WriteLine($"❌ Git Error: {ex.Message} (Not a Git repository)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ An unexpected error occurred: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Handles the full AI workflow for checking and committing/branching.
+        /// Returns Task to be awaited by the command line interface.
+        /// </summary>
+        async static Task InitialRun()
+        {
+            try
+            {
+                Console.WriteLine("|______Running Initial AI Workflow______|");
+                
+                string workDirectory = Environment.CurrentDirectory;
+                var service = new GitService(workDirectory);
+                
+                (bool isDirty, string? diff) = await Task.Run(() => service.GetRepoStatusAndDiff());
+                
+                if (isDirty)
+                {
+                    Console.WriteLine("Reading changes made on current directory...");
+                    // Placeholder for the full logic:
+                    // 1. Get API Key
+                    // 2. Initialize GeminiService
+                    // 3. Get AI decision (commit message or new branch name)
+                    // 4. Execute Git command (commit or branch + commit)
+                    Console.WriteLine("Diff found. Processing with AI...");
+                    await RunAutoFlow(); // Reusing the AutoFlow logic for demonstration
+                }
+                else
+                {
+                    Console.WriteLine("Working directory is clean. Nothing to do.");
+                }
+            }
+            catch (RepositoryNotFoundException ex)
+            {
+                Console.WriteLine($"❌ Git Error: {ex.Message} (Not a Git repository)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ An unexpected error occurred in InitialRun: {ex.Message}");
+            }
+        }
     }
 }

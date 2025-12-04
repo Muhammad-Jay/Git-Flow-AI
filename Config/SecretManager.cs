@@ -7,7 +7,7 @@ namespace GitFlowAi.Config
         public string GetGeminiApiKey()
         {
             // Environment.GetEnvironmentVariable is the standard way to read environment variables in .NET
-            string? apiKey = Environment.GetEnvironmentVariable(ApiKeyVariableName);
+            // string? apiKey = Environment.GetEnvironmentVariable(ApiKeyVariableName);
 
             // if (string.IsNullOrEmpty(apiKey))
             // {
