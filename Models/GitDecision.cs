@@ -7,13 +7,13 @@ namespace GitFlowAi.Models
     public enum GitAction
     {
         [JsonPropertyName("SKIP")]
-        SKIP, // No action needed or changes are too vague.
+        Skip, // No action needed or changes are too vague.
         
         [JsonPropertyName("COMMIT")]
-        COMMIT, // Direct commit to current branch.
+        Commit, // Direct commit to current branch.
         
         [JsonPropertyName("BRANCH")]
-        BRANCH // Create a new branch and commit to it.
+        Branch // Create a new branch and commit to it.
     }
 
     public class GitDecision

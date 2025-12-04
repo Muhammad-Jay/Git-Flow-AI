@@ -17,7 +17,6 @@ namespace GitFlowAi.Models
 
         public async Task<GitDecision> GenerateDecision(string? diff)
         {
-            GitDecision defaultJsonObject = new GitDecision();
             string systemInstruction = SYSTEMINSTRUCTION;
             string userPrompt = $"Analyze the following unified diff and respond with the necessary JSON object:\n\n{diff}";
             
@@ -42,7 +41,7 @@ namespace GitFlowAi.Models
                 if (jsonObject == null)
                 {
                     return new GitDecision { 
-                        Action = GitAction.SKIP, 
+                        Action = GitAction.Skip, 
                         CommitMessage = "ai-error", 
                         Explanation = "AI returned an empty response. Skipping action." 
                     };
@@ -52,9 +51,9 @@ namespace GitFlowAi.Models
             }
             catch (Exception e)
             {
-                    Console.WriteLine(e.Message);
+                    Console.WriteLine("> Error: " + e.Message);
                     return new GitDecision { 
-                        Action = GitAction.SKIP, 
+                        Action = GitAction.Skip, 
                         CommitMessage = "ai-error", 
                         Explanation = "AI returned an empty response. Skipping action." 
                     };

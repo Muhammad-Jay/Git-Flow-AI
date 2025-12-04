@@ -1,6 +1,4 @@
 using LibGit2Sharp;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace GitFlowAi.Services
 {
@@ -125,13 +123,72 @@ namespace GitFlowAi.Services
         public void AddFiles(List<string> filePaths)
         {
             if(_repository == null) return;
-            
+
+            Console.WriteLine("Adding path...");
             foreach (string path in filePaths)
             {
                 _repository.Index.Add(path);
-                Console.WriteLine(path);
+                Console.WriteLine($"Path: {path}");
             }
             _repository.Index.Write();
+            Console.WriteLine("--------------------------------------------------");
+        }
+
+        public async void Stage()
+        {
+            (bool isDirty, string? diff) = await Task.Run(() => GetRepoStatusAndDiff());
+                
+            if (isDirty)
+            {
+                Commands.Stage(_repository, "*");
+            }
+            else
+            {
+                Console.WriteLine("Working directory is clean. Nothing to do.");
+            }
+        }
+
+        public void CreateBranch(string branchName)
+        {
+            if(_repository == null) return;
+            
+            _repository.CreateBranch(branchName);
+        }
+
+        public void CheckoutBranch(string branchName)
+        {
+            if(_repository == null) return;
+            
+            // _repository.Checkout(branchName);
+        }
+
+        /// <summary>
+        /// Creates a new branch, checks it out, stages the specified files, and commits.
+        /// This method is triggered when AI recommends the 'BRANCH' action.
+        /// </summary>
+        public void CreateBranchAndCommit(string branchName, string commitMessage, List<string> filePaths)
+        {
+            if (string.IsNullOrWhiteSpace(branchName) || string.IsNullOrWhiteSpace(commitMessage))
+            {
+                throw new ArgumentException("Branch name and commit message cannot be empty for BRANCH action.");
+            }
+            
+            // Ensure branch name is safe (LibGit2Sharp validates, but this is a courtesy check)
+            if (branchName.Contains(' '))
+            {
+                throw new ArgumentException($"Invalid branch name '{branchName}'. Use kebab-case (e.g., feature/new-task).");
+            }
+
+            // 1. Create the new Branch pointer based on the current HEAD
+            Branch newBranch = _repository.Branches.Add(branchName, _repository.Head.Tip);
+            Console.WriteLine($"   -> Created new branch: {branchName}");
+
+            // 2. Checkout the new Branch (switches working directory and HEAD)
+            Commands.Checkout(_repository, newBranch);
+            Console.WriteLine($"   -> Switched to branch: {newBranch.FriendlyName}");
+            
+            // 3. Stage and Commit Changes (Reusing Commit logic)
+            CommitChanges(commitMessage, filePaths);
         }
         
     }
