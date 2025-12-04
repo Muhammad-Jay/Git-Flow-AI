@@ -80,6 +80,9 @@ namespace GitFlowAi.Handlers
                             Console.WriteLine($"Reason: {response.Explanation}");
                             break;
                         case GitAction.Branch:
+                            _service.CreateBranchAndCommit(response.BranchName, response.CommitMessage, response.FilePaths);
+                            Console.WriteLine($"Commit: {response.CommitMessage}");
+                            Console.WriteLine($"Reason: {response.Explanation}");
                             break;
                         case GitAction.Skip:
                             Console.WriteLine($"{response.Explanation}");
