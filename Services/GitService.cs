@@ -1,4 +1,6 @@
 using LibGit2Sharp;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace GitFlowAi.Services
 {
@@ -27,6 +29,29 @@ namespace GitFlowAi.Services
             {
                 throw new InvalidOperationException($"Failed to open Git repository: {ex.Message}");
             }
+        }
+        
+        private Signature GetDefaultSignature()
+        {
+            if (_repository == null)
+            {
+                Console.WriteLine("No Git repository found.");
+            }
+            // 1. Try to build the signature from the repository's configuration
+            Signature configSignature = _repository.Config.BuildSignature(DateTimeOffset.Now);
+
+            if (configSignature != null)
+            {
+                Console.WriteLine($"Using Git config signature: {configSignature.Name} <{configSignature.Email}>");
+                return configSignature;
+            }
+            
+            // 2. Fallback if configuration is missing or invalid
+            string fallbackName = "GitFlowAI Automaton";
+            string fallbackEmail = "ai@gitflow.com";
+            
+            Console.WriteLine($"Could not read user configuration. Using fallback signature: {fallbackName} <{fallbackEmail}>");
+            return new Signature(fallbackName, fallbackEmail, DateTimeOffset.Now);
         }
         
         public void PrintCurrentBranch()
@@ -75,6 +100,38 @@ namespace GitFlowAi.Services
             {
                 Console.WriteLine("Failed to open Git repository.");
             }
+        }
+
+        public void CommitChanges(string message, List<string> filePaths)
+        {
+            if(_repository == null) return;
+            
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                throw new ArgumentException("Commit message cannot be empty.");
+            }
+            
+            AddFiles(filePaths);
+            
+            Signature signature = GetDefaultSignature();
+            Signature author = signature;
+            Signature committer = signature;
+
+            _repository.Commit(message, author, committer);
+            
+            Console.WriteLine($"Successfully committed {filePaths.Count} files.");
+        }
+
+        public void AddFiles(List<string> filePaths)
+        {
+            if(_repository == null) return;
+            
+            foreach (string path in filePaths)
+            {
+                _repository.Index.Add(path);
+                Console.WriteLine(path);
+            }
+            _repository.Index.Write();
         }
         
     }

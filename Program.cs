@@ -17,16 +17,14 @@ namespace GitFlowAi
             var statusCommand = new Command("status", "Check the status of the current working directory.");
             var runCommand = new Command("run", "Ai check the current directory and commit changes or create branched and commit base on the changes.");
             
-            // Handlers now correctly point to async methods returning Task
             statusCommand.SetHandler( () => RunStatusCheck());
             autoCommand.SetHandler( () => RunAutoFlow());
             runCommand.SetHandler(() => InitialRun());
 
             rootCommand.Add(autoCommand);
             rootCommand.Add(statusCommand);
-            rootCommand.Add(runCommand); // Uncommented the run command
+            rootCommand.Add(runCommand);
             
-            // The root command correctly awaits the execution flow
             return await rootCommand.InvokeAsync(args);
         }
         
@@ -38,8 +36,7 @@ namespace GitFlowAi
         {
             try
             {
-                string workDirectory = Environment.CurrentDirectory;
-                // NOTE: GitService must be correctly initialized, assuming its definition is in GitFlowAi.Services
+                var workDirectory = Environment.CurrentDirectory;
                 var service = new GitService(workDirectory);
                 
                 service.PrintCurrentBranch();
@@ -60,8 +57,7 @@ namespace GitFlowAi
             }
             catch (Exception e)
             {
-                // Catching the exception here prevents the application from crashing silently
-                Console.WriteLine($"❌ An error occurred during status check: {e.Message}");
+                Console.WriteLine($"An error occurred during status check: {e.Message}");
             }
         }
 
@@ -80,13 +76,10 @@ namespace GitFlowAi
                 string apiKey = manager.GetGeminiApiKey();
             
                 Console.WriteLine($"API Key Status: {(string.IsNullOrEmpty(apiKey) ? "MISSING" : "FOUND")}");
-            
-                // NOTE: GeminiService must be correctly initialized, assuming its definition is in GitFlowAi.Services
+                
                 var genClient = new GeminiService(apiKey);
             
                 service.PrintCurrentBranch();
-                // Assuming GetRepoStatus() just prints information and doesn't return anything
-                service.GetRepoStatus();
             
                 // Task.Run is used to ensure the LibGit2Sharp call is offloaded from the UI thread,
                 // which is good practice for CPU-bound operations in command line tools.
@@ -98,9 +91,25 @@ namespace GitFlowAi
                     Console.WriteLine("--------------------------------------------------");
 
                     // The actual AI call, which should be asynchronous internally in GeminiService
-                    string response = await genClient.GenerateDecision(diff);
+                    GitDecision response = await genClient.GenerateDecision(diff);
 
                     Console.WriteLine($"AI Response: {response}");
+
+                    switch (response.Action)
+                    {
+                        case GitAction.COMMIT:
+                            service.CommitChanges(response.CommitMessage, response.FilePaths);
+                            break;
+                        case GitAction.BRANCH:
+                            break;
+                        case GitAction.SKIP:
+                            Console.WriteLine($"{response.Explanation}");
+                            break;
+                        default:
+                            Console.WriteLine("No Action needed.");
+                            break;
+                    }
+                    
                     string formatedDiff = diff.Length > 0 ? diff.Substring(0, Math.Min(diff.Length, 100)) + (diff.Length > 100 ? "..." : "") : "No Diff";
                     Console.WriteLine($"Preview of Changes Sent to AI: {formatedDiff}");
                 }
