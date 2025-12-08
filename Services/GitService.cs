@@ -1,4 +1,5 @@
 using LibGit2Sharp;
+using GitFlowAi.Utilities;
 
 namespace GitFlowAi.Services
 {
@@ -8,17 +9,13 @@ namespace GitFlowAi.Services
         
         public GitService(string workingDirectory)
         {
-            // 1. Discover the repository path
             string? repoPath = Repository.Discover(workingDirectory);
 
             if (string.IsNullOrEmpty(repoPath))
             {
                 throw new RepositoryNotFoundException($"Error: Not in a Git repository. Starting directory: {workingDirectory}");
             }
-
-            Console.WriteLine($"Repository: {repoPath}");
-
-            // 2. Initialize the LibGit2Sharp Repository object
+            
             try
             {
                 _repository = new Repository(repoPath);
@@ -29,13 +26,14 @@ namespace GitFlowAi.Services
             }
         }
         
-        private Signature GetDefaultSignature()
+        private Signature? GetDefaultSignature()
         {
             if (_repository == null)
             {
                 Console.WriteLine("No Git repository found.");
+                return null;
             }
-            // 1. Try to build the signature from the repository's configuration
+            // Try to build the signature from the repository's configuration
             Signature configSignature = _repository.Config.BuildSignature(DateTimeOffset.Now);
 
             if (configSignature != null)
@@ -44,7 +42,7 @@ namespace GitFlowAi.Services
                 return configSignature;
             }
             
-            // 2. Fallback if configuration is missing or invalid
+            // Fallback if configuration is missing or invalid
             string fallbackName = "GitFlowAI Automaton";
             string fallbackEmail = "ai@gitflow.com";
             
@@ -83,10 +81,6 @@ namespace GitFlowAi.Services
                 if (status.IsDirty)
                 {
                     Console.WriteLine("Changes were made on working directory");
-                
-                    // Patch unifiedPatch = _repository.Diff.Compare<Patch>();
-                
-                    // Console.WriteLine(unifiedPatch.Content);
                 }
                 else
                 {
@@ -108,16 +102,39 @@ namespace GitFlowAi.Services
             {
                 throw new ArgumentException("Commit message cannot be empty.");
             }
-            
-            AddFiles(filePaths);
-            
-            Signature signature = GetDefaultSignature();
-            Signature author = signature;
-            Signature committer = signature;
 
-            _repository.Commit(message, author, committer);
+            List<string> options = new List<string>();
+            options.Add("Proceed");
+            options.Add("Exit (Esc)");
+
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine("|     Please select one of the options below.        |");
+            Console.WriteLine("------------------------------------------------------");
+            Console.WriteLine(" ");
+            Console.WriteLine($"are you sure you want to commit changes using this message? ({message})");
+
+            int selectedIndex = TerminalPrompt.PromptForSelection(options);
+            string selectedOption = options[selectedIndex];
+
+            if (selectedOption == "Proceed")
+            {
+                AddFiles(filePaths);
             
-            Console.WriteLine($"Successfully committed {filePaths.Count} files.");
+                Signature? signature = GetDefaultSignature();
+
+                if (signature == null) return;
+                
+                Signature author = signature;
+                Signature committer = signature;
+
+                _repository.Commit(message, author, committer);
+            
+                Console.WriteLine($"Successfully committed {filePaths.Count} files.");
+            }
+            else
+            {
+                Console.WriteLine("Process terminated.");
+            }
         }
 
         public void AddFiles(List<string> filePaths)
@@ -145,7 +162,7 @@ namespace GitFlowAi.Services
         {
             (bool isDirty, string? diff) = await Task.Run(() => GetRepoStatusAndDiff());
                 
-            if (isDirty)
+            if (isDirty && !string.IsNullOrWhiteSpace(diff))
             {
                 Commands.Stage(_repository, "*");
             }
@@ -155,8 +172,9 @@ namespace GitFlowAi.Services
             }
         }
 
-        public Branch CreateBranch(string branchName)
+        public Branch? CreateBranch(string branchName)
         {
+            if (_repository == null) return null;
             Branch newBranch = _repository.Branches.Add(branchName, _repository.Head.Tip);
             Console.WriteLine($"   -> Created new branch: {branchName}");
             return newBranch;
@@ -187,11 +205,101 @@ namespace GitFlowAi.Services
                 throw new ArgumentException($"Invalid branch name '{branchName}'. Use kebab-case (e.g., feature/new-task).");
             }
             
-            Branch newBranch = await Task.Run(() => CreateBranch(branchName));
+            Branch? newBranch = await Task.Run(() => CreateBranch(branchName));
+
+            if (newBranch == null) return;
             
             await Task.Run(() => CheckoutBranch(newBranch));
            
             CommitChanges(commitMessage, filePaths);
+        }
+        
+        public bool CheckCurrentDirectory(string dir)
+        {
+            try
+            {
+                if (!Directory.Exists(dir))
+                {
+                    Console.WriteLine($"Directory {dir} does not exist.");
+                    Console.WriteLine("Creating Directory...");
+                    Directory.CreateDirectory(dir);
+                    return true;
+                }
+                else
+                {
+                    Console.WriteLine($"Directory {dir} already exists.");
+                    return false;
+                }
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                Console.WriteLine(e.Message);
+                return false;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return false;
+            }
+        }
+        
+        public void CreateFile(string path, string? content = "")
+        {
+            try
+            {
+                Console.WriteLine($"Creating Config file...\n {path}"); 
+                File.WriteAllText(path, content);
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                Console.WriteLine(e.Message);
+                throw;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                throw;
+            }
+        }
+
+        public string[]? GetEnvVariables()
+        {
+            if (_repository == null) return null;
+            
+            string configFolderName = ".gitflowai";
+            string envFileName = ".env";
+            string currentWorkingDirectory = Directory.GetCurrentDirectory();
+            string envPath = Path.Combine(currentWorkingDirectory, configFolderName, envFileName);
+            
+            try
+            {
+                List<string> envs = new List<string>();
+                
+                string configEnvContent = File.ReadAllText(envPath);
+
+                if (!string.IsNullOrEmpty(configEnvContent))
+                {
+                    foreach (string env in configEnvContent.Split("\n"))
+                    {
+                        envs.Add(env.Trim());
+                    }
+                    return envs.ToArray();
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                Console.WriteLine(e.Message);
+                return null;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return null;
+            }
         }
         
     }

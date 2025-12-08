@@ -1,7 +1,3 @@
-# -------------------------------------
-# 1. Standard .NET Build and Binaries
-# -------------------------------------
-
 # Built projects/binaries
 [Bb]in/
 [Oo]bj/
@@ -23,6 +19,9 @@ GEMINI.MD
 
 # Rider/JetBrains IDE files
 .idea/
+
+# GitFlowAi files
+.gitflowai/
 
 # -------------------------------------
 # 2. .NET Tool Specific Exclusions
@@ -52,6 +51,8 @@ Thumbs.db
 # If you use a file named 'secrets.json' for the Gemini API key, add it here:
 secrets.json 
 *.config.user 
+
+.gitignore
 
 # Environment variable configuration (e.g., .env file)
 .env

@@ -1,6 +1,8 @@
 using GitFlowAi.Config;
 using GitFlowAi.Models;
 using GitFlowAi.Services;
+using GitFlowAi.Utilities;
+using GitFlowAi.Server;
 using LibGit2Sharp;
 
 namespace GitFlowAi.Handlers
@@ -26,7 +28,7 @@ namespace GitFlowAi.Handlers
                 // for I/O bound methods which should be async internally.
                 (bool isDirty, string? diff) = await Task.Run(() => _service.GetRepoStatusAndDiff());
 
-                if (isDirty)
+                if (isDirty && !string.IsNullOrWhiteSpace(diff))
                 {
                     Console.WriteLine($"Changes were made on working directory: {_workDirectory}");
                 }
@@ -46,7 +48,7 @@ namespace GitFlowAi.Handlers
         /// Runs the AI-powered automatic Git flow (analyze and decide).
         /// Changed from async void to async Task.
         /// </summary>
-        public static async Task RunAutoFlow()
+        public static async Task InitialRun()
         {
             try
             {
@@ -54,7 +56,7 @@ namespace GitFlowAi.Handlers
                 var manager = new SecretManager();
                 string apiKey = manager.GetGeminiApiKey();
             
-                Console.WriteLine($"API Key Status: {(string.IsNullOrEmpty(apiKey) ? "MISSING" : "FOUND")}");
+                // Console.WriteLine($"API Key Status: {(string.IsNullOrEmpty(apiKey) ? "MISSING" : "FOUND")}");
                 
                 var genClient = new GeminiService(apiKey);
             
@@ -65,8 +67,6 @@ namespace GitFlowAi.Handlers
             
                 if (isDirty)
                 {
-                    Console.WriteLine($"Changes were made on working directory: {_workDirectory}");
-
                     // The actual AI call, which should be asynchronous internally in GeminiService
                     GitDecision response = await genClient.GenerateDecision(diff);
 
@@ -94,7 +94,7 @@ namespace GitFlowAi.Handlers
                 }
                 else
                 {
-                    Console.WriteLine("Directory is Clean. No changes to process.");
+                    Console.WriteLine("Directory is Clean. No changes ware made.");
                 }
             }
             catch (RepositoryNotFoundException ex)
@@ -106,46 +106,42 @@ namespace GitFlowAi.Handlers
                 Console.WriteLine($"An unexpected error occurred: {ex.Message}");
             }
         }
-        
-        /// <summary>
-        /// Handles the full AI workflow for checking and committing/branching.
-        /// Returns Task to be awaited by the command line interface.
-        /// </summary>
-        public static async Task InitialRun()
-        {
-            try
-            {
-                Console.WriteLine("--------------------------------------------------");
-                
-                (bool isDirty, string? diff) = await Task.Run(() => _service.GetRepoStatusAndDiff());
-                
-                if (isDirty)
-                {
-                    Console.WriteLine("Diff found. Processing with AI...");
-                    await RunAutoFlow();
-                }
-                else
-                {
-                    Console.WriteLine("Working directory is clean. Nothing to do.");
-                }
-            }
-            catch (RepositoryNotFoundException ex)
-            {
-                Console.WriteLine($"Git Error: {ex.Message} (Not a Git repository)");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An unexpected error occurred in InitialRun: {ex.Message}");
-            }
-        }
 
         /// <summary>
         /// Analyze the current working Directory, and suggest commit messages and branch names.
         /// </summary>
-        public static async void RunAnalyzeCommand()
+        public static async Task RunAnalyzeCommand()
         {
-            Console.WriteLine("--------------------------------------------------");
+            var manager = new SecretManager();
+            string apiKey = manager.GetGeminiApiKey();
+            var genClient = new GeminiService(apiKey);
             
+            string message = "------------------------------------------------------" + "\n" +
+                             "|     Please select one of the options below.        |" + "\n" + 
+                             "------------------------------------------------------";
+            LineSeparator.Line();
+            try
+            {
+                (bool isDirty, string? diff) = await Task.Run(() => _service.GetRepoStatusAndDiff());
+
+                if (isDirty)
+                {
+                    string fileContent = File.ReadAllText($"{_workDirectory}/Templates/Analysis/AnalysisPreview.html");
+                    
+                    AiAnalysis aiAnalysis = await genClient.GetAnalysis(diff);
+                    
+                    await WebServer.StartServer(fileContent.Replace("{{aiResponse}}", aiAnalysis.FinalSummary));
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                throw;
+            }
+            finally
+            {
+                LineSeparator.Line();
+            }
         }
         
         /// <summary>
@@ -155,8 +151,8 @@ namespace GitFlowAi.Handlers
         {
             try
             {
-                Console.WriteLine("--------------------------------------------------");
-               
+                LineSeparator.Line();
+
                 _service.Stage();
 
                 Console.WriteLine("Directory staged.");
@@ -166,7 +162,58 @@ namespace GitFlowAi.Handlers
                 Console.WriteLine(e.Message);
                 throw;
             }
+            finally
+            {
+                LineSeparator.Line();
+            }
             
+        }
+        
+        public static void RunInitCommand()
+        { 
+            string configFolderName = Constants.Constants.ConfigFolderName;
+            string configDir = Constants.Constants.ConfigDir;
+            string configFilePath = Constants.Constants.ConfigFilePath;
+            string readmeFilePath = Constants.Constants.ReadmeFilePath;
+            string envFilePath = Constants.Constants.EnvFilePath;
+
+            try
+            {
+                LineSeparator.Line();
+                // Check if folder already exists, and create a new one if it doesn't. return a boolean for error.
+                bool isDirNotExists = _service.CheckCurrentDirectory(configDir);
+
+                if (isDirNotExists)
+                {
+                    string systemInstruction = Constants.Constants.SYSTEMINSTRUCTION;
+
+                    Console.WriteLine(
+                        $"Initializing a {configFolderName} folder in the current working directory. \n {configDir}");
+
+                    _service.CreateFile(configFilePath);
+                    _service.CreateFile(envFilePath);
+                    _service.CreateFile(readmeFilePath, systemInstruction);
+                    _service.PrintCurrentBranch();
+                    _service.GetRepoStatus();
+                }
+                else
+                {
+
+                    _service.PrintCurrentBranch();
+                    _service.GetRepoStatus();
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                throw;
+            }
+            finally
+            {
+                LineSeparator.Line();
+            }
+            
+           
         }
     }
 }
